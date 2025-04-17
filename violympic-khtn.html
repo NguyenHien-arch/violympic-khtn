@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Luyện thi Violympic - KHTN THCS</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: linear-gradient(to bottom right, #e0f7fa, #fff3e0); padding: 20px; animation: fadeIn 1s ease-in; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .container { max-width: 800px; margin: auto; background: white; padding: 20px; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.1); transition: all 0.5s; }
+    h2, h3 { text-align: center; color: #2e7d32; }
+    .question { margin-bottom: 20px; padding: 10px; border-left: 4px solid #4caf50; background: #f1f8e9; border-radius: 5px; }
+    .answers label { display: block; margin-bottom: 5px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; border: none; border-radius: 8px; background: #4caf50; color: white; transition: background 0.3s; }
+    button:hover { background: #388e3c; }
+    .result { font-size: 18px; font-weight: bold; text-align: center; color: #d32f2f; margin-top: 20px; }
+    .hidden { display: none; }
+    select { padding: 5px; margin-bottom: 10px; }
+    #timer { text-align: center; font-weight: bold; margin-bottom: 15px; color: #e53935; font-size: 18px; animation: pulse 1s infinite alternate; }
+    @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.05); } }
+    textarea { width: 100%; height: 150px; margin-top: 10px; padding: 10px; border-radius: 8px; border: 1px solid #ccc; font-family: monospace; }
+  </style>
+</head>
+<body>
+  <audio id="endSound" src="https://www.soundjay.com/button/beep-07.wav"></audio>
+
+  <div class="container">
+    <h2>Luyện Thi Violympic</h2>
+    <h3>Khoa học Tự nhiên - Cấp THCS</h3>
+
+    <div id="setup">
+      <label for="grade">Chọn lớp:</label>
+      <select id="grade">
+        <option value="6">Lớp 6</option>
+        <option value="7">Lớp 7</option>
+        <option value="8">Lớp 8</option>
+        <option value="9">Lớp 9</option>
+      </select>
+      <br>
+      <label for="subject">Chọn môn:</label>
+      <select id="subject">
+        <option value="ly">Vật lý</option>
+        <option value="hoa">Hóa học</option>
+        <option value="sinh">Sinh học</option>
+      </select>
+      <br><br>
+      <button onclick="startQuiz()">Bắt đầu thi</button>
+    </div>
+
+    <form id="quizForm" class="hidden">
+      <div id="timer"></div>
+      <div id="quizContainer"></div>
+      <div style="text-align: center;">
+        <button type="button" onclick="submitQuiz()">Nộp bài</button>
+      </div>
+    </form>
+
+    <div id="result" class="result"></div>
+    <div id="summary" class="hidden">
+      <h3>Chi tiết bài làm:</h3>
+      <textarea id="review" readonly></textarea>
+      <button onclick="downloadResult()">Tải kết quả về máy</button>
+    </div>
+  </div>
+
+  <script>
+    const questionBank = {
+      ly: [
+        { q: "Đơn vị đo cường độ dòng điện là gì?", a: ["Vôn (V)", "Ampe (A)", "Oát (W)", "Jun (J)"], correct: "Ampe (A)" },
+        { q: "Hiện tượng chất lỏng chuyển thành hơi gọi là gì?", a: ["Ngưng tụ", "Bay hơi", "Hóa rắn", "Đông đặc"], correct: "Bay hơi" },
+        { q: "Vật nào sau đây là chất dẫn điện tốt?", a: ["Gỗ khô", "Nhựa", "Đồng", "Thủy tinh"], correct: "Đồng" },
+      ],
+      hoa: [
+        { q: "Nguyên tố hóa học nào có ký hiệu là H?", a: ["Hidro", "Heli", "Halogen", "Hydroxit"], correct: "Hidro" },
+        { q: "Công thức hóa học của nước là gì?", a: ["HO", "H2", "H2O", "OH2"], correct: "H2O" },
+        { q: "Chất nào sau đây là axit?", a: ["NaCl", "HCl", "KOH", "CaO"], correct: "HCl" },
+      ],
+      sinh: [
+        { q: "Quá trình quang hợp xảy ra ở bộ phận nào của cây?", a: ["Rễ", "Thân", "Lá", "Hoa"], correct: "Lá" },
+        { q: "Tế bào thực vật có gì đặc biệt?", a: ["Nhân", "Ty thể", "Màng tế bào", "Thành tế bào"], correct: "Thành tế bào" },
+        { q: "Cơ quan hô hấp của người là gì?", a: ["Dạ dày", "Tim", "Phổi", "Gan"], correct: "Phổi" },
+      ]
+    };
+
+    let timerInterval;
+    let timeLeft = 180;
+    let selectedAnswers = [];
+
+    function startQuiz() {
+      document.getElementById("setup").classList.add("hidden");
+      document.getElementById("quizForm").classList.remove("hidden");
+      const subject = document.getElementById("subject").value;
+      const questions = questionBank[subject];
+      const container = document.getElementById("quizContainer");
+      container.innerHTML = "";
+      selectedAnswers = [];
+
+      questions.forEach((q, index) => {
+        const div = document.createElement("div");
+        div.classList.add("question");
+        div.innerHTML = `<p>${index + 1}. ${q.q}</p>` +
+          q.a.map(a => `<label><input type="radio" name="q${index}" value="${a}" onchange="saveAnswer(${index}, '${a}')"> ${a}</label>`).join("");
+        container.appendChild(div);
+      });
+
+      startTimer();
+    }
+
+    function saveAnswer(index, answer) {
+      selectedAnswers[index] = answer;
+    }
+
+    function startTimer() {
+      const timer = document.getElementById("timer");
+      timer.textContent = `Thời gian còn lại: ${formatTime(timeLeft)}`;
+      timerInterval = setInterval(() => {
+        timeLeft--;
+        timer.textContent = `Thời gian còn lại: ${formatTime(timeLeft)}`;
+        if (timeLeft <= 0) {
+          clearInterval(timerInterval);
+          document.getElementById("endSound").play();
+          alert("⏰ Hết giờ! Bài làm của bạn đã được nộp tự động.");
+          submitQuiz();
+        }
+      }, 1000);
+    }
+
+    function formatTime(seconds) {
+      const min = Math.floor(seconds / 60);
+      const sec = seconds % 60;
+      return `${min}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    function submitQuiz() {
+      clearInterval(timerInterval);
+      const subject = document.getElementById("subject").value;
+      const questions = questionBank[subject];
+      let score = 0;
+      let reviewText = "";
+
+      questions.forEach((q, index) => {
+        const selected = selectedAnswers[index] || "(không chọn)";
+        const correct = q.correct;
+        if (selected === correct) score++;
+        reviewText += `${index + 1}. ${q.q}\n- Bạn chọn: ${selected}\n- Đáp án đúng: ${correct}\n\n`;
+      });
+
+      const resultDiv = document.getElementById("result");
+      resultDiv.textContent = `✅ Bạn đã trả lời đúng ${score}/${questions.length} câu hỏi.\n⏰ Thời gian còn lại: ${formatTime(timeLeft)}`;
+
+      document.getElementById("summary").classList.remove("hidden");
+      document.getElementById("review").value = reviewText;
+    }
+
+    function downloadResult() {
+      const blob = new Blob([document.getElementById("review").value], { type: "text/plain;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "ket_qua_luyen_thi.txt";
+      link.click();
+    }
+  </script>
+</body>
+</html>
